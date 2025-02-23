@@ -1,4 +1,34 @@
+// threejs-script.js
 import * as THREE from 'https://threejs.org/build/three.module.js';
+
+class Polygon {
+    constructor(vertices, color = 0xffa500) {
+        this.vertices = vertices.map(v => new THREE.Vector2(v.x, v.y));
+        this.color = color;
+        this.mesh = this.createPolygon();
+    }
+
+    createPolygon() {
+        const shape = new THREE.Shape(this.vertices);
+        const geometry = new THREE.ShapeGeometry(shape);
+        const material = new THREE.MeshBasicMaterial({ color: this.color, side: THREE.DoubleSide });
+        return new THREE.Mesh(geometry, material);
+    }
+
+    addToScene(scene) {
+        scene.add(this.mesh);
+    }
+
+    removeFromScene(scene) {
+        scene.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
+    }
+
+    clone() {
+        return new Polygon(this.vertices, this.color);
+    }
+}
 
 let scene, camera, renderer;
 let plane, gridHelper;
@@ -14,9 +44,9 @@ export function init() {
     scene = new THREE.Scene();
     camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 1000);
     camera.position.set(0, 0, 10);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    renderer = new THREE.WebGLRenderer();
+    renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
@@ -25,7 +55,7 @@ export function init() {
     plane = new THREE.Mesh(planeGeometry, planeMaterial);
     scene.add(plane);
 
-    gridHelper = new THREE.GridHelper(10, 10, 0x000000, 0x000000);
+    gridHelper = new THREE.GridHelper(10, 10, 0x000000, 0x000000); // Green grid lines
     gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
@@ -46,17 +76,19 @@ function onMouseClick(event) {
         return;
     }
     if (event.target.tagName === 'BUTTON' || isComplete) return;
-    const x = (event.clientX / window.innerWidth) * 10 - 5;
-    const y = -(event.clientY / window.innerHeight) * 10 + 5;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 10 - 5;
+    const y = -(((event.clientY - rect.top) / rect.height) * 10 - 5);
     vertices.push(new THREE.Vector3(x, y, 0));
     drawVertices();
 }
 
 function onMouseMove(event) {
     if (isMovingCopy && movingCopy) {
-        const x = (event.clientX / window.innerWidth) * 10 - 5;
-        const y = -(event.clientY / window.innerHeight) * 10 + 5;
-        movingCopy.position.set(x, y, 0);
+        const rect = renderer.domElement.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 10 - 5;
+        const y = -(((event.clientY - rect.top) / rect.height) * 10 - 5);
+        movingCopy.mesh.position.set(x, y, 0);
     }
 }
 
@@ -75,19 +107,16 @@ function drawVertices() {
 function completePolygon() {
     if (vertices.length < 3) return;
     isComplete = true;
-    if (polygon) scene.remove(polygon);
-    const shape = new THREE.Shape(vertices);
-    const geometry = new THREE.ShapeGeometry(shape);
-    const material = new THREE.MeshBasicMaterial({ color: 0xffa500, side: THREE.DoubleSide }); // Orange polygon
-    polygon = new THREE.Mesh(geometry, material);
-    scene.add(polygon);
+    if (polygon) polygon.removeFromScene(scene);
+    polygon = new Polygon(vertices);
+    polygon.addToScene(scene);
     drawVertices();
 }
 
 function copyPolygon() {
     if (!isComplete || !polygon) return;
     movingCopy = polygon.clone();
-    scene.add(movingCopy);
+    movingCopy.addToScene(scene);
     isMovingCopy = true;
 }
 
@@ -95,23 +124,15 @@ function resetScene() {
     vertices = [];
     isComplete = false;
     if (polygon) {
-        scene.remove(polygon);
-        polygon.geometry.dispose();
-        polygon.material.dispose();
+        polygon.removeFromScene(scene);
         polygon = null;
     }
-    copiedPolygons.forEach(poly => {
-        scene.remove(poly);
-        poly.geometry.dispose();
-        poly.material.dispose();
-    });
+    copiedPolygons.forEach(poly => poly.removeFromScene(scene));
     copiedPolygons = [];
     lines.forEach(line => scene.remove(line));
     lines = [];
     if (movingCopy) {
-        scene.remove(movingCopy);
-        movingCopy.geometry.dispose();
-        movingCopy.material.dispose();
+        movingCopy.removeFromScene(scene);
         movingCopy = null;
         isMovingCopy = false;
     }
